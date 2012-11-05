@@ -33,6 +33,7 @@ JSMINIFY_METHOD(minify) {
 
     if(jsmin_jsmin(js, &out)==SUCCESS) {
         ZVAL_STRINGL(return_value, out.c, out.len, 1);
+        smart_str_free(&out);
         return;
     }
 
