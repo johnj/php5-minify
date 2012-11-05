@@ -15,5 +15,5 @@ var_dump(strcmp($their_js, $our_js));
 
 ?>
 --EXPECTF--
-*** validate minify's JSMin output w/JSMin userspace for prototype.js
+*** validate minify's JSMin output vs JSMin userspace for prototype.js
 int(0)
