@@ -7,6 +7,7 @@
 */
 
 #include <stdlib.h>
+#include "php.h"
 #include "ext/standard/php_smart_str.h"
 
 int jsmin_jsmin(char *in, smart_str *jsm);
