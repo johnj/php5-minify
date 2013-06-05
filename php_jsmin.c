@@ -21,7 +21,8 @@ JSMINIFY_METHOD(__construct) {
 }
 
 JSMINIFY_METHOD(minify) {
-    char *js = NULL;
+
+	char *js = NULL;
     int js_len = 0;
     smart_str out = {0};
 
@@ -29,14 +30,16 @@ JSMINIFY_METHOD(minify) {
         return;
     }
 
-    INIT_SMART_STR(out);
+	if (js_len) {
+		php_jsmin_ctx_t ctx = { 0, 0, EOF, js, 0, 0 };
+	    INIT_SMART_STR(out);
 
-    if(jsmin_jsmin(js, &out)==SUCCESS) {
-        ZVAL_STRINGL(return_value, out.c, out.len, 1);
-        smart_str_free(&out);
-        return;
-    }
-
+	    if(jsmin_jsmin(&ctx, &out)==SUCCESS) {
+	        ZVAL_STRINGL(return_value, out.c, out.len, 1);
+	        smart_str_free(&out);
+	        return;
+	    }
+	}
     ZVAL_BOOL(return_value, 0);
 }
 
