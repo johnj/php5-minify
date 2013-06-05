@@ -35,12 +35,6 @@ SOFTWARE.
 
 #include "jsmin.h"
 
-static int   theA;
-static int   theB;
-static int   theLookahead = EOF;
-static char *jsmin_in = NULL;
-static int   jsmin_in_c = 0;
-static int   lastError = 0;
 
 /* jsmin_isAlphanum -- return true if the character is a letter, digit, underscore,
         dollar sign, or non-ASCII character.
@@ -61,13 +55,13 @@ jsmin_isAlphanum(int c)
 */
 
 static int
-jsmin_get()
+jsmin_get(php_jsmin_ctx_t *ctx)
 {
-    int c = theLookahead;
-    theLookahead = 0;
+    int c = ctx->theLookahead;
+    ctx->theLookahead = 0;
 
     if (c == 0) {
-        c = jsmin_in[jsmin_in_c++];
+        c = ctx->jsmin_in[ctx->jsmin_in_c++];
     }
     if (c >= ' ' || c == '\n' || c == '\0') {
         return c;
@@ -83,45 +77,44 @@ jsmin_get()
 */
 
 static int
-jsmin_peek()
+jsmin_peek(php_jsmin_ctx_t *ctx)
 {
-    theLookahead = jsmin_get();
-    return theLookahead;
+    ctx->theLookahead = jsmin_get(ctx);
+    return ctx->theLookahead;
 }
 
 
-/* jsmin_next -- jsmin_get the next character, excluding comments. jsmin_peek() is used to see
+/* jsmin_next -- jsmin_get the next character, excluding comments. jsmin_peek(ctx) is used to see
         if a '/' is followed by a '/' or '*'.
 */
 
 static int
-jsmin_next()
+jsmin_next(php_jsmin_ctx_t *ctx)
 {
-    int c = jsmin_get();
+    int c = jsmin_get(ctx);
     if  (c == '/') {
-        switch (jsmin_peek()) {
+        switch (jsmin_peek(ctx)) {
         case '/':
             for (;;) {
-                c = jsmin_get();
+                c = jsmin_get(ctx);
                 if (c <= '\n') {
                     return c;
                 }
             }
         case '*':
-            jsmin_get();
+            jsmin_get(ctx);
             for (;;) {
-                switch (jsmin_get()) {
+                switch (jsmin_get(ctx)) {
                 case '*':
-                    if (jsmin_peek() == '/') {
-                        jsmin_get();
+                    if (jsmin_peek(ctx) == '/') {
+                        jsmin_get(ctx);
                         return ' ';
                     }
                     break;
                 case '\0':
                     php_error_docref(NULL TSRMLS_CC, E_WARNING, "php-minify: unterminated javascript comment.");
-                    lastError = 2;
-                    
-                    return;
+                    ctx->lastError = 2;
+                    return 0;
                 }
             }
         default:
@@ -141,124 +134,122 @@ jsmin_next()
 */
 
 static void
-jsmin_action(int d, smart_str *jsm)
+jsmin_action(php_jsmin_ctx_t *ctx, int d, smart_str *jsm)
 {
     switch (d) {
     case 1:
-        smart_str_appendl(jsm, &theA, 1);
+        smart_str_appendl(jsm, &ctx->theA, 1);
     case 2:
-        theA = theB;
-        if (theA == '\'' || theA == '"' || theA == '`') {
+        ctx->theA = ctx->theB;
+        if (ctx->theA == '\'' || ctx->theA == '"' || ctx->theA == '`') {
             for (;;) {
-                smart_str_appendl(jsm, &theA, 1);
-                theA = jsmin_get();
-                if (theA == theB) {
+                smart_str_appendl(jsm, &ctx->theA, 1);
+                ctx->theA = jsmin_get(ctx);
+                if (ctx->theA == ctx->theB) {
                     break;
                 }
-                if (theA == '\\') {
-                    smart_str_appendl(jsm, &theA, 1);
-                    theA = jsmin_get();
+                if (ctx->theA == '\\') {
+                    smart_str_appendl(jsm, &ctx->theA, 1);
+                    ctx->theA = jsmin_get(ctx);
                 }
-                if (theA == '\0') {
+                if (ctx->theA == '\0') {
                     php_error_docref(NULL TSRMLS_CC, E_WARNING, "php-minify: unterminated javascript string literal.");
-                    lastError = 3;
+                    ctx->lastError = 3;
                     return;
                 }
             }
         }
     case 3:
-        theB = jsmin_next();
-        if (theB == '/' && (theA == '(' || theA == ',' || theA == '=' ||
-                            theA == ':' || theA == '[' || theA == '!' ||
-                            theA == '&' || theA == '|' || theA == '?' ||
-                            theA == '{' || theA == '}' || theA == ';' ||
-                            theA == '\n')) {
-            smart_str_appendl(jsm, &theA, 1);
-            smart_str_appendl(jsm, &theB, 1);
+        ctx->theB = jsmin_next(ctx);
+        if (ctx->theB == '/' && (ctx->theA == '(' || ctx->theA == ',' || ctx->theA == '=' ||
+                            ctx->theA == ':' || ctx->theA == '[' || ctx->theA == '!' ||
+                            ctx->theA == '&' || ctx->theA == '|' || ctx->theA == '?' ||
+                            ctx->theA == '{' || ctx->theA == '}' || ctx->theA == ';' ||
+                            ctx->theA == '\n')) {
+            smart_str_appendl(jsm, &ctx->theA, 1);
+            smart_str_appendl(jsm, &ctx->theB, 1);
             for (;;) {
-                theA = jsmin_get();
-                if (theA == '[') {
+                ctx->theA = jsmin_get(ctx);
+                if (ctx->theA == '[') {
                     for (;;) {
-                        smart_str_appendl(jsm, &theA, 1);
-                        theA = jsmin_get();
-                        if (theA == ']') {
+                        smart_str_appendl(jsm, &ctx->theA, 1);
+                        ctx->theA = jsmin_get(ctx);
+                        if (ctx->theA == ']') {
                             break;
                         }
-                        if (theA == '\\') {
-                            smart_str_appendl(jsm, &theA, 1);
-                            theA = jsmin_get();
+                        if (ctx->theA == '\\') {
+                            smart_str_appendl(jsm, &ctx->theA, 1);
+                            ctx->theA = jsmin_get(ctx);
                         }
-                        if (theA == '\0') {
+                        if (ctx->theA == '\0') {
                             php_error_docref(NULL TSRMLS_CC, E_WARNING, "php-minify: unterminated javascript regular expression literal.");
-                            lastError = 1;
+                            ctx->lastError = 1;
                             return;
                         }
                     }
-                } else if (theA == '/') {
+                } else if (ctx->theA == '/') {
                     break;
-                } else if (theA =='\\') {
-                    smart_str_appendl(jsm, &theA, 1);
-                    theA = jsmin_get();
+                } else if (ctx->theA =='\\') {
+                    smart_str_appendl(jsm, &ctx->theA, 1);
+                    ctx->theA = jsmin_get(ctx);
                 }
-                if (theA == '\0') {
+                if (ctx->theA == '\0') {
                     php_error_docref(NULL TSRMLS_CC, E_WARNING, "php-minify: unterminated javascript regular expression literal.");
-                    lastError = 2;
+                    ctx->lastError = 2;
                     return;
                 }
-                smart_str_appendl(jsm, &theA, 1);
+                smart_str_appendl(jsm, &ctx->theA, 1);
             }
-            theB = jsmin_next();
+            ctx->theB = jsmin_next(ctx);
         }
     }
 }
 
-int jsmin_jsmin(char *in, smart_str *jsm)
+int jsmin_jsmin(php_jsmin_ctx_t *ctx, smart_str *jsm)
 {
-    theB = jsmin_in_c = lastError = theLookahead = 0;
-    jsmin_in = in;
-    theA = '\n';
+    ctx->theA = '\n';
 
-    jsmin_action(3, jsm);
-    while (theA != '\0') {
-        switch (theA) {
+    jsmin_action(ctx, 3, jsm);
+    while (ctx->theA != '\0') {
+        switch (ctx->theA) {
         case ' ':
-            if (jsmin_isAlphanum(theB)) {
-                jsmin_action(1, jsm);
+            if (jsmin_isAlphanum(ctx->theB)) {
+                jsmin_action(ctx, 1, jsm);
             } else {
-                jsmin_action(2, jsm);
+                jsmin_action(ctx, 2, jsm);
             }
             break;
         case '\n':
-            switch (theB) {
+            switch (ctx->theB) {
             case '{':
             case '[':
             case '(':
             case '+':
             case '-':
-                jsmin_action(1, jsm);
+                jsmin_action(ctx, 1, jsm);
                 break;
             case ' ':
-                jsmin_action(3, jsm);
+                jsmin_action(ctx, 3, jsm);
                 break;
             default:
-                if (jsmin_isAlphanum(theB)) {
-                    jsmin_action(1, jsm);
+                if (jsmin_isAlphanum(ctx->theB)) {
+                    jsmin_action(ctx, 1, jsm);
                 } else {
-                    jsmin_action(2, jsm);
+                    jsmin_action(ctx, 2, jsm);
                 }
             }
             break;
         default:
-            switch (theB) {
+            switch (ctx->theB) {
             case ' ':
-                if (jsmin_isAlphanum(theA)) {
-                    jsmin_action(1, jsm);
+                if (jsmin_isAlphanum(ctx->theA)) {
+                    jsmin_action(ctx, 1, jsm);
                     break;
                 }
-                jsmin_action(3, jsm);
+                jsmin_action(ctx, 3, jsm);
                 break;
             case '\n':
-                switch (theA) {
+                switch (ctx->theA) {
                 case '}':
                 case ']':
                 case ')':
@@ -267,25 +258,25 @@ int jsmin_jsmin(char *in, smart_str *jsm)
                 case '"':
                 case '\'':
                 case '`':
-                    jsmin_action(1, jsm);
+                    jsmin_action(ctx, 1, jsm);
                     break;
                 default:
-                    if (jsmin_isAlphanum(theA)) {
-                        jsmin_action(1, jsm);
+                    if (jsmin_isAlphanum(ctx->theA)) {
+                        jsmin_action(ctx, 1, jsm);
                     } else {
-                        jsmin_action(3, jsm);
+                        jsmin_action(ctx, 3, jsm);
                     }
                 }
                 break;
             default:
-                jsmin_action(1, jsm);
+                jsmin_action(ctx, 1, jsm);
                 break;
             }
         }
     }
 
-    if(lastError) {
-        return lastError;
+    if(ctx->lastError) {
+        return ctx->lastError;
     }
 
     return SUCCESS;
